@@ -59,3 +59,9 @@ smtp_tls_CAfile = {{ postfix_smtp_tls_cafile }}
 {% else %}
 relayhost =
 {% endif %}
+
+{% if postfix_other_config_keys is defined %}
+{% for key, value in postfix_other_config_keys.iteritems() %}
+{{ key }} = {{ value }}
+{% endfor %}
+{% endif %}
