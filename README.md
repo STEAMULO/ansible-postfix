@@ -132,7 +132,9 @@ MIT
 
 #### Author Information
 
-Mischa ter Smitten
+Steamulo - www.steamulo.com
+
+Forked from [Mischa ter Smitten](https://github.com/Oefenweb)
 
 #### Feedback, bug-reports, requests, ...
 
