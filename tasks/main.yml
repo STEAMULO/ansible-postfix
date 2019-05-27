@@ -1,5 +1,13 @@
 # tasks file for postfix
 ---
+- name: facts | set
+  set_fact:
+     is_docker_guest: "{{ ansible_virtualization_role | default('host') == 'guest' and ansible_virtualization_type | default('none') == 'docker' }}"
+  tags:
+    - configuration
+    - postfix
+    - postfix-facts
+
 - name: configure debconf
   debconf:
     name: "{{ item.name }}"
@@ -14,11 +22,10 @@
 
 - name: install package
   apt:
-    name: "{{ item }}"
+    name: "{{ postfix_install }}"
     state: "{{ apt_install_state | default('latest') }}"
     update_cache: true
     cache_valid_time: "{{ apt_update_cache_valid_time | default(3600) }}"
-  with_items: "{{ postfix_install }}"
   tags:
     - configuration
     - postfix
@@ -53,11 +60,12 @@
 - name: configure sasl username/password
   template:
     src: etc/postfix/sasl_passwd.j2
-    dest: /etc/postfix/sasl_passwd
+    dest: "{{ postfix_sasl_passwd_file }}"
     owner: root
     group: root
     mode: 0600
   when: postfix_relayhost != false
+  no_log: true
   notify:
     - postmap sasl_passwd
     - restart postfix
@@ -68,7 +76,7 @@
 
 - name: configure aliases
   lineinfile:
-    dest: /etc/aliases
+    dest: "{{ postfix_aliases_file }}"
     regexp: '^{{ item.user }}:.*'
     line: '{{ item.user }}: {{ item.alias }}'
     owner: root
@@ -85,9 +93,28 @@
     - postfix
     - postfix-aliases
 
+- name: configure virtual aliases
+  lineinfile:
+    dest: "{{ postfix_virtual_aliases_file }}"
+    regexp: '^{{ item.virtual }}.*'
+    line: '{{ item.virtual }} {{ item.alias }}'
+    owner: root
+    group: root
+    mode: 0644
+    create: true
+    state: present
+  with_items: "{{ postfix_virtual_aliases }}"
+  notify:
+    - new virtual aliases
+    - restart postfix
+  tags:
+    - configuration
+    - postfix
+    - postfix-virtual-aliases
+
 - name: configure sender canonical maps
   lineinfile:
-    dest: /etc/postfix/sender_canonical_maps
+    dest: "{{ postfix_sender_canonical_maps_file }}"
     regexp: '^{{ item.sender }}.*'
     line: '{{ item.sender }} {{ item.rewrite }}'
     owner: root
@@ -99,12 +126,68 @@
   notify:
     - postmap sender_canonical_maps
     - restart postfix
+  tags:
+    - configuration
+    - postfix
+    - postfix-sender-canonical-maps
+
+- name: configure recipient canonical maps
+  lineinfile:
+    dest: "{{ postfix_recipient_canonical_maps_file }}"
+    regexp: '^{{ item.recipient }}.*'
+    line: '{{ item.recipient }} {{ item.rewrite }}'
+    owner: root
+    group: root
+    mode: 0644
+    create: true
+    state: present
+  with_items: "{{ postfix_recipient_canonical_maps }}"
+  notify:
+    - postmap recipient_canonical_maps
+    - restart postfix
+  tags:
+    - configuration
+    - postfix
+    - postfix-recipient-canonical-maps
+
+- name: configure generic table
+  lineinfile:
+    dest: "{{ postfix_generic_file }}"
+    regexp: '^{{ item.pattern }}.*'
+    line: '{{ item.pattern }} {{ item.result }}'
+    owner: root
+    group: root
+    mode: 0644
+    create: true
+    state: present
+  with_items: "{{ postfix_generic }}"
+  notify:
+    - postmap generic
+    - restart postfix
+  tags:
+    - configuration
+    - postfix
+    - postfix-generic-table
+
+- name: configure header checks
+  template:
+    src: etc/postfix/header_checks.j2
+    dest: /etc/postfix/header_checks
+    owner: root
+    group: root
+    mode: 0644
+  notify:
+    - restart postfix
+  tags:
+    - configuration
+    - postfix
+    - postfix-header-checks-table
 
 - name: start and enable service
   service:
     name: postfix
-    state: started
-    enabled: true
+    state: "{{ service_default_state | default('started') }}"
+    enabled: "{{ service_default_enabled | default(true) | bool }}"
   tags:
     - configuration
     - postfix
